@@ -1,0 +1,9 @@
+apiVersion: example.ycliu912.com/v1alpha1
+kind: HelloWorld
+metadata:
+  name: example-helloworld
+spec:
+  # Add fields here
+  replicas: 3
+  host: helloworld.ycliu912.com
+  recipient: World
