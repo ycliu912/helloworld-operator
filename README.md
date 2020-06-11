@@ -31,3 +31,49 @@ Process finished with exit code 1
 
 ```
 
+test processing:
+```bash
+527  kubectl cluster-info
+  528  kubectl create -f deploy/crds/example.ycliu912.com_helloworlds_crd.yaml
+  529  kubectl create -f deploy/crds/example.ycliu912.com_helloworlds_crd.yaml
+  530  kubectl create -f deploy/crds/example.ycliu912.com_helloworlds_crd.yaml
+  531  kubectl create -f deploy/crds/example.ycliu912.com_helloworlds_crd.yaml
+  532  kubectl create -f deploy/crds/example.ycliu912.com_v1alpha1_helloworld_cr.yaml
+  533  kubectl get -f deploy/crds/example.ycliu912.com_helloworlds_crd.yaml
+  534  kubectl get -f deploy/crds/example.ycliu912.com_v1alpha1_helloworld_cr.yaml
+  535  operator-sdk build ycliu912/helloworld-operator:latest
+  536  docker images
+  537  docker images  | grep ycliu
+  538  clear
+  539  ls
+  540  kubectl apply -f deploy
+  541  kubectl get -f deploy --watch
+  542  kubectl get -f deploy -watch
+  543  kubectl get -f deploy
+  544  kubectl get -f deploy
+  545  kubectl get -f deploy
+  546  kubectl get -f deploy
+  547  kubectl get -f deploy
+  548  kubectl get -f deploy
+  549  kubectl describe -f deploy
+  550  kubectl get pod
+  551  docker push ycliu912/helloworld-operator
+  552  docker login
+  553  docker push ycliu912/helloworld-operator
+  554  kubectl get pod
+  555  docker logs -f helloworld-operator-66458657d7-mj85k
+  556  kubectl get pod
+  557  kubectl get -f deploy
+  558  kubectl delete -f deploy
+  559  kubectl get -f deploy
+  560  kubectl apply -f deploy
+  561  kubectl get -f deploy
+  562  kubectl describe -f deploy
+  563  kubectl get pods
+  564  docker logs helloworld-operator-66458657d7-b5w65
+  565  kubectl logs pod helloworld-operator-66458657d7-b5w65
+  566  kubectl logs helloworld-operator-66458657d7-b5w65
+  567  ls
+```
+
+
