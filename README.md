@@ -18,3 +18,16 @@ err:
 {"level":"error","ts":1591865064.5155802,"logger":"cmd","msg":"","error":"expected pointer, but got invalid kind","stacktrace":"github.com/go-logr/zapr.(*zapLogger).Error\n\t/Users/liuyanchao/go/pkg/mod/github.com/go-logr/zapr@v0.1.1/zapr.go:128\nmain.main\n\thelloworld-operator/cmd/manager/main.go:127\nruntime.main\n\t/Users/liuyanchao/.g/go/src/runtime/proc.go:203"}
 ```
 
+local debug:
+```bash
+/private/var/folders/k8/t39hjy910bx2gh5k1ztk7fbc0000gn/T/___go_build_github_com_ycliu912_helloworld_operator_cmd_manager #gosetup
+{"level":"info","ts":1591865356.984412,"logger":"cmd","msg":"Operator Version: 0.0.1"}
+{"level":"info","ts":1591865356.984891,"logger":"cmd","msg":"Go Version: go1.14.2"}
+{"level":"info","ts":1591865356.984915,"logger":"cmd","msg":"Go OS/Arch: darwin/amd64"}
+{"level":"info","ts":1591865356.984944,"logger":"cmd","msg":"Version of operator-sdk: v0.18.0+git"}
+{"level":"error","ts":1591865356.9849741,"logger":"cmd","msg":"Failed to get watch namespace","error":"WATCH_NAMESPACE must be set","stacktrace":"github.com/go-logr/zapr.(*zapLogger).Error\n\t/Users/liuyanchao/go_client-go_workqueue/10-automation-with-kubernetes-operators/practise/pkg/mod/github.com/go-logr/zapr@v0.1.1/zapr.go:128\nmain.main\n\t/Users/liuyanchao/go_client-go_workqueue/10-automation-with-kubernetes-operators/practise/src/github.com/ycliu912/helloworld-operator/cmd/manager/main.go:76\nruntime.main\n\t/Users/liuyanchao/.g/go/src/runtime/proc.go:203"}
+
+Process finished with exit code 1
+
+```
+
