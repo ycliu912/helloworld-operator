@@ -2,9 +2,13 @@ package helloworld
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	examplev1alpha1 "github.com/ycliu912/helloworld-operator/pkg/apis/example/v1alpha1"
+
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	extv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,10 +25,10 @@ import (
 
 var log = logf.Log.WithName("controller_helloworld")
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
+///**
+//* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
+//* business logic.  Delete these comments after modifying this file.*
+// */
 
 // Add creates a new HelloWorld Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -51,14 +55,27 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
+	//// TODO(user): Modify this to be the types you create that are owned by the primary resource
 	// Watch for changes to secondary resource Pods and requeue the owner HelloWorld
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &examplev1alpha1.HelloWorld{},
-	})
+	err = c.Watch(&source.Kind{Type: &examplev1alpha1.HelloWorld{}}, &handler.EnqueueRequestForOwner{})
 	if err != nil {
 		return err
+	}
+
+	watchTypes := []runtime.Object{
+		&appsv1.Deployment{},
+		&corev1.Service{},
+		&extv1beta1.Ingress{},
+	}
+
+	for i := range watchTypes {
+		err := c.Watch(&source.Kind{Type: watchTypes[i]}, &handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType: &examplev1alpha1.HelloWorld{},
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -86,6 +103,8 @@ func (r *ReconcileHelloWorld) Reconcile(request reconcile.Request) (reconcile.Re
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling HelloWorld")
 
+	ctx := context.TODO()
+
 	// Fetch the HelloWorld instance
 	instance := &examplev1alpha1.HelloWorld{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
@@ -100,54 +119,209 @@ func (r *ReconcileHelloWorld) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// Define a new Pod object
-	pod := newPodForCR(instance)
+	labels := map[string]string{
+		"app": instance.Name,
+	}
 
-	// Set HelloWorld instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
+	deployment, err := r.BuildDeployment(instance, labels)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Check if this Pod already exists
-	found := &corev1.Pod{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
+	service, err := r.buildService(instance, labels)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	ingress, err := r.BuildIngress(instance, labels)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	foundDepl := appsv1.Deployment{}
+	foundService := corev1.Service{}
+	foundIngress := extv1beta1.Ingress{}
+
+	err = r.client.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, &foundDepl)
 	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
-		err = r.client.Create(context.TODO(), pod)
-		if err != nil {
+		reqLogger.Info("creating a new deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
+		if err := r.client.Create(ctx, deployment); err != nil {
+			return reconcile.Result{}, err
+		} else if err == nil && foundDepl.Spec.Replicas != instance.Spec.Replicas {
+			reqLogger.Info("updating existing Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
+			foundDepl.Spec.Replicas = instance.Spec.Replicas
+			if err := r.client.Update(ctx, &foundDepl); err != nil {
+				return reconcile.Result{}, err
+			}
+		} else if err != nil {
 			return reconcile.Result{}, err
 		}
+	}
 
-		// Pod created successfully - don't requeue
-		return reconcile.Result{}, nil
+	err = r.client.Get(ctx, types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, &foundService)
+	if err != nil && errors.IsNotFound(err) {
+		reqLogger.Info("creating a new Service", "Service.Namespace", service.Namespace, "service.Name", service.Name)
+		if err := r.client.Create(ctx, service); err != nil {
+			return reconcile.Result{}, err
+		}
+	} else if err == nil {
+		reqLogger.Info("updating existing Service", "Service.Namespace", service.Namespace, "Service.Name", service.Name)
+
+		foundService.Spec.Ports = service.Spec.Ports
+
+		if err := r.client.Update(ctx, &foundService); err != nil {
+			return reconcile.Result{}, err
+		}
 	} else if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Pod already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
+	err = r.client.Get(ctx, types.NamespacedName{Name: ingress.Name, Namespace: ingress.Namespace}, &foundIngress)
+	if err != nil && errors.IsNotFound(err) {
+		reqLogger.Info("creating a new Ingress", "Ingress.Namespace", ingress.Namespace, "ingress.Name", ingress.Name)
+		if err := r.client.Create(ctx, ingress); err != nil {
+			return reconcile.Result{}, err
+		}
+	} else if err == nil {
+		reqLogger.Info("updating existing Ingress", "Ingress.Namespace", ingress.Namespace, "Ingress.Name", ingress.Name)
+		ingress.Spec.DeepCopyInto(&foundIngress.Spec)
+		if err := r.client.Update(ctx, &foundIngress); err != nil {
+			return reconcile.Result{}, err
+		}
+	} else if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	return reconcile.Result{}, nil
+
 }
 
 // newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *examplev1alpha1.HelloWorld) *corev1.Pod {
-	labels := map[string]string{
-		"app": cr.Name,
+//func newPodForCR(cr *examplev1alpha1.HelloWorld) *corev1.Pod {
+//	labels := map[string]string{
+//		"app": cr.Name,
+//	}
+//	return &corev1.Pod{
+//		ObjectMeta: metav1.ObjectMeta{
+//			Name:      cr.Name + "-pod",
+//			Namespace: cr.Namespace,
+//			Labels:    labels,
+//		},
+//		Spec: corev1.PodSpec{
+//			Containers: []corev1.Container{
+//				{
+//					Name:    "busybox",
+//					Image:   "busybox",
+//					Command: []string{"sleep", "3600"},
+//				},
+//			},
+//		},
+//	}
+//}
+
+
+func (r *ReconcileHelloWorld) BuildDeployment(cr *examplev1alpha1.HelloWorld, labels map[string]string) (*appsv1.Deployment, error) {
+	recipient := cr.Spec.Recipient
+	if recipient == "" {
+		recipient = "World"
 	}
-	return &corev1.Pod{
+
+	deployment := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
+			Name: cr.Name,
 			Namespace: cr.Namespace,
-			Labels:    labels,
+			Labels: labels,
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: cr.Spec.Replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						corev1.Container{
+							Name: "helloworld",
+							Image: "ycliu912/helloworld",
+							Env: []corev1.EnvVar{
+								corev1.EnvVar{Name: "HELLOWORLD_RECIPIENT", Value: recipient},
+							},
+							Ports: []corev1.ContainerPort{
+								corev1.ContainerPort{Name: "http", ContainerPort: 8080},
+							},
+						},
+					},
 				},
 			},
 		},
 	}
+
+	// Set HelloWorld instance as the owner and controller
+	if err := controllerutil.SetControllerReference(cr, &deployment, r.scheme); err != nil {
+		return nil, err
+	}
+
+	return &deployment, nil
+}
+
+func (r *ReconcileHelloWorld) buildService(cr *examplev1alpha1.HelloWorld, labels map[string]string) (*corev1.Service, error) {
+	service := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: cr.Name,
+			Namespace: cr.Namespace,
+			Labels: labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				corev1.ServicePort{Name: "http", TargetPort: intstr.FromString("http"), Port:80},
+			},
+			Selector: labels,
+		},
+	}
+
+	// Set HelloWorld instance as the owner and controller
+	if err := controllerutil.SetControllerReference(cr, &service, r.scheme); err != nil {
+		return nil, err
+	}
+
+	return &service, nil
+}
+
+func (r *ReconcileHelloWorld) BuildIngress(cr *examplev1alpha1.HelloWorld, labels map[string]string) (*extv1beta1.Ingress, error) {
+	ingress := extv1beta1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: cr.Name,
+			Namespace: cr.Namespace,
+			Labels: labels,
+		},
+		Spec: extv1beta1.IngressSpec{
+			Rules: []extv1beta1.IngressRule{
+				extv1beta1.IngressRule{
+					Host: cr.Spec.Host,
+					IngressRuleValue: extv1beta1.IngressRuleValue{
+						HTTP: &extv1beta1.HTTPIngressRuleValue{
+							Paths: []extv1beta1.HTTPIngressPath{
+								extv1beta1.HTTPIngressPath{
+									Path: "/",
+									Backend: extv1beta1.IngressBackend{
+										ServiceName: cr.Name,
+										ServicePort: intstr.FromString("http"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cr, &ingress, r.scheme); err != nil {
+		return nil, err
+	}
+
+	return &ingress, nil
 }
